@@ -59,10 +59,6 @@ lazy val commonSettings = Seq(
   scalacOptions in (Compile, console) ~= (_ filterNot Set("-Xfatal-warnings", "-Ywarn-unused-import").contains),
   scalacOptions in (Test, console) := (scalacOptions in (Compile, console)).value,
 
-  // use sbt <module_name>/test:console to run an ammonite console
-  libraryDependencies += "com.lihaoyi" % "ammonite" % "1.0.3" % "test" cross CrossVersion.patch,
-  initialCommands in (Test, console) := """ammonite.Main().run()""",
-
   scalariformPreferences := scalariformPreferences.value
     .setPreference(DanglingCloseParenthesis, Prevent)
     .setPreference(DoubleIndentConstructorArguments, true)
