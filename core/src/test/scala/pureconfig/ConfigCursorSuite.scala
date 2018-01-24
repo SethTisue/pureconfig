@@ -9,7 +9,7 @@ class ConfigCursorSuite extends BaseSuite {
   val defaultPathStr = "key1.key2"
 
   def conf(confStr: String): ConfigValue = {
-    ConfigFactory.parseString(s"aux = $confStr").getValue("aux")
+    ConfigFactory.parseString(s"aux = $confStr").root.get("aux")
   }
 
   def cursor(confStr: String, pathElems: List[String] = defaultPath): ConfigCursor =
@@ -23,44 +23,48 @@ class ConfigCursorSuite extends BaseSuite {
   }
 
   it should "allow being casted to string in a safe way" in {
-    cursor("abc").asString shouldBe
-      Right("abc")
+    cursor("abc").asString shouldBe Right("abc")
+    cursor("4").asString shouldBe Right("4")
+    cursor("true").asString shouldBe Right("true")
+
+    cursor("null").asString should failWith(
+      WrongType(ConfigValueType.NULL, Set(ConfigValueType.STRING)), defaultPathStr)
 
     cursor("[1, 2]").asString should failWith(
-      WrongType(ConfigValueType.LIST, Set(ConfigValueType.STRING), None, defaultPathStr))
+      WrongType(ConfigValueType.LIST, Set(ConfigValueType.STRING)), defaultPathStr)
 
     cursor("{ a: 1, b: 2 }").asString should failWith(
-      WrongType(ConfigValueType.OBJECT, Set(ConfigValueType.STRING), None, defaultPathStr))
+      WrongType(ConfigValueType.OBJECT, Set(ConfigValueType.STRING)), defaultPathStr)
   }
 
   it should "allow being casted to a list cursor in a safe way" in {
     cursor("abc").asListCursor should failWith(
-      WrongType(ConfigValueType.STRING, Set(ConfigValueType.LIST), None, defaultPathStr))
+      WrongType(ConfigValueType.STRING, Set(ConfigValueType.LIST)), defaultPathStr)
 
     cursor("[1, 2]").asListCursor shouldBe
       Right(ConfigListCursor(conf("[1, 2]").asInstanceOf[ConfigList], defaultPath))
 
     cursor("{ a: 1, b: 2 }").asListCursor should failWith(
-      WrongType(ConfigValueType.OBJECT, Set(ConfigValueType.LIST), None, defaultPathStr))
+      WrongType(ConfigValueType.OBJECT, Set(ConfigValueType.LIST)), defaultPathStr)
   }
 
   it should "allow being casted to a list of cursors in a safe way" in {
     cursor("abc").asList should failWith(
-      WrongType(ConfigValueType.STRING, Set(ConfigValueType.LIST), None, defaultPathStr))
+      WrongType(ConfigValueType.STRING, Set(ConfigValueType.LIST)), defaultPathStr)
 
     cursor("[1, 2]").asList shouldBe
       Right(List(cursor("1", "0" :: defaultPath), cursor("2", "1" :: defaultPath)))
 
     cursor("{ a: 1, b: 2 }").asList should failWith(
-      WrongType(ConfigValueType.OBJECT, Set(ConfigValueType.LIST), None, defaultPathStr))
+      WrongType(ConfigValueType.OBJECT, Set(ConfigValueType.LIST)), defaultPathStr)
   }
 
   it should "allow being casted to an object cursor in a safe way" in {
     cursor("abc").asObjectCursor should failWith(
-      WrongType(ConfigValueType.STRING, Set(ConfigValueType.OBJECT), None, defaultPathStr))
+      WrongType(ConfigValueType.STRING, Set(ConfigValueType.OBJECT)), defaultPathStr)
 
     cursor("[1, 2]").asObjectCursor should failWith(
-      WrongType(ConfigValueType.LIST, Set(ConfigValueType.OBJECT), None, defaultPathStr))
+      WrongType(ConfigValueType.LIST, Set(ConfigValueType.OBJECT)), defaultPathStr)
 
     cursor("{ a: 1, b: 2 }").asObjectCursor shouldBe
       Right(ConfigObjectCursor(conf("{ a: 1, b: 2 }").asInstanceOf[ConfigObject], defaultPath))
@@ -68,10 +72,10 @@ class ConfigCursorSuite extends BaseSuite {
 
   it should "allow being casted to a map of cursors in a safe way" in {
     cursor("abc").asMap should failWith(
-      WrongType(ConfigValueType.STRING, Set(ConfigValueType.OBJECT), None, defaultPathStr))
+      WrongType(ConfigValueType.STRING, Set(ConfigValueType.OBJECT)), defaultPathStr)
 
     cursor("[1, 2]").asMap should failWith(
-      WrongType(ConfigValueType.LIST, Set(ConfigValueType.OBJECT), None, defaultPathStr))
+      WrongType(ConfigValueType.LIST, Set(ConfigValueType.OBJECT)), defaultPathStr)
 
     cursor("{ a: 1, b: 2 }").asMap shouldBe
       Right(Map("a" -> cursor("1", "a" :: defaultPath), "b" -> cursor("2", "b" :: defaultPath)))
@@ -79,7 +83,7 @@ class ConfigCursorSuite extends BaseSuite {
 
   it should "allow being casted to a collection cursor in a safe way" in {
     cursor("abc").asCollectionCursor should failWith(
-      WrongType(ConfigValueType.STRING, Set(ConfigValueType.LIST, ConfigValueType.OBJECT), None, defaultPathStr))
+      WrongType(ConfigValueType.STRING, Set(ConfigValueType.LIST, ConfigValueType.OBJECT)), defaultPathStr)
 
     cursor("[1, 2]").asCollectionCursor shouldBe
       Right(Left(ConfigListCursor(conf("[1, 2]").asInstanceOf[ConfigList], defaultPath)))
@@ -116,7 +120,7 @@ class ConfigCursorSuite extends BaseSuite {
   it should "allow access to a given index in a safe way" in {
     listCursor("[1, 2]").atIndex(0) shouldBe Right(cursor("1", "0" :: defaultPath))
     listCursor("[1, 2]").atIndex(1) shouldBe Right(cursor("2", "1" :: defaultPath))
-    listCursor("[1, 2]").atIndex(2) should failWith(KeyNotFound(s"$defaultPathStr.2", None, Set()))
+    listCursor("[1, 2]").atIndex(2) should failWith(KeyNotFound("2", Set()), defaultPathStr)
   }
 
   it should "allow access to a given index returning an undefined value cursor on out-of-range indices" in {
@@ -128,7 +132,7 @@ class ConfigCursorSuite extends BaseSuite {
   it should "provide a tailOption method that keeps the absolute paths correct" in {
     listCursor("[1, 2]").tailOption shouldBe Some(listCursor("[2]").copy(offset = 1))
     listCursor("[1, 2]").tailOption.get.atIndex(0) shouldBe Right(cursor("2", "1" :: defaultPath))
-    listCursor("[1, 2]").tailOption.get.atIndex(1) should failWith(KeyNotFound(s"$defaultPathStr.2", None, Set()))
+    listCursor("[1, 2]").tailOption.get.atIndex(1) should failWith(KeyNotFound("2", Set()), defaultPathStr)
     listCursor("[]").tailOption shouldBe None
   }
 
@@ -156,7 +160,7 @@ class ConfigCursorSuite extends BaseSuite {
 
   it should "allow access to a given key in a safe way" in {
     objCursor("{ a: 1, b: 2 }").atKey("a") shouldBe Right(cursor("1", "a" :: defaultPath))
-    objCursor("{ a: 1, b: 2 }").atKey("c") should failWith(KeyNotFound(s"$defaultPathStr.c", None, Set()))
+    objCursor("{ a: 1, b: 2 }").atKey("c") should failWith(KeyNotFound("c", Set()), defaultPathStr)
   }
 
   it should "allow access to a given key returning an undefined value cursor on non-existing keys" in {

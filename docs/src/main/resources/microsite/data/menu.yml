@@ -1,0 +1,42 @@
+options:
+
+    - title: Quick Start
+      url: docs/index.html
+
+    - title: Built-in Supported Types
+      url: docs/built-in-supported-types.html
+
+    - title: Supporting New Types
+      url: docs/supporting-new-types.html
+
+      nested_options:
+        - title: Combinators
+          url: docs/combinators.html
+        - title: Config Cursors
+          url: docs/config-cursors.html
+        - title: Complex Types
+          url: docs/complex-types.html
+
+    - title: Overriding Behavior for Types
+      url: docs/overriding-behavior-for-types.html
+
+      nested_options:
+        - title: Case Classes
+          url: docs/overriding-behavior-for-case-classes.html
+        - title: Sealed Families
+          url: docs/overriding-behavior-for-sealed-families.html
+
+    - title: Configurable Converters
+      url: docs/configurable-converters.html
+
+    - title: Error Handling
+      url: docs/error-handling.html
+
+    - title: Config Writers
+      url: docs/config-writers.html
+
+    - title: Library Integrations
+      url: docs/library-integrations.html
+
+    - title: FAQ
+      url: docs/faq.html

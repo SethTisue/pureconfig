@@ -9,7 +9,7 @@ classes.
 In addition to [core pureconfig](https://github.com/pureconfig/pureconfig), you'll need:
 
 ```scala
-libraryDependencies += "com.github.pureconfig" %% "pureconfig-cats" % "0.8.0"
+libraryDependencies += "com.github.pureconfig" %% "pureconfig-cats" % "0.9.0"
 ```
 
 ## Example
@@ -103,7 +103,7 @@ val conf = parseString("{}")
 // conf: com.typesafe.config.Config = Config(SimpleConfigObject({}))
 
 val res = loadConfig[MyConfig2](conf).left.map(_.toNonEmptyList)
-// res: scala.util.Either[cats.data.NonEmptyList[pureconfig.error.ConfigReaderFailure],MyConfig2] = Left(NonEmptyList(KeyNotFound(a,None,Set()), KeyNotFound(b,None,Set())))
+// res: scala.util.Either[cats.data.NonEmptyList[pureconfig.error.ConfigReaderFailure],MyConfig2] = Left(NonEmptyList(ConvertFailure(KeyNotFound(a,Set()),None,), ConvertFailure(KeyNotFound(b,Set()),None,)))
 ```
 
 This allows cats users to easily convert a result of a `ConfigReader` into a `ValidatedNel`:
@@ -116,5 +116,5 @@ import pureconfig.error.ConfigReaderFailure
 ```scala
 val catsRes: ValidatedNel[ConfigReaderFailure, MyConfig2] =
   Validated.fromEither(res)
-// catsRes: cats.data.ValidatedNel[pureconfig.error.ConfigReaderFailure,MyConfig2] = Invalid(NonEmptyList(KeyNotFound(a,None,Set()), KeyNotFound(b,None,Set())))
+// catsRes: cats.data.ValidatedNel[pureconfig.error.ConfigReaderFailure,MyConfig2] = Invalid(NonEmptyList(ConvertFailure(KeyNotFound(a,Set()),None,), ConvertFailure(KeyNotFound(b,Set()),None,)))
 ```

@@ -3,8 +3,8 @@ package pureconfig
 import scala.collection.JavaConverters._
 import scala.util.{ Failure, Success, Try }
 
+import com.typesafe.config.ConfigValueType._
 import com.typesafe.config._
-import pureconfig.ConvertHelpers._
 import pureconfig.backend.PathUtil
 import pureconfig.error._
 
@@ -57,7 +57,7 @@ sealed trait ConfigCursor {
    *         failures otherwise.
    */
   def asString: Either[ConfigReaderFailures, String] =
-    castOrFail(ConfigValueType.STRING, _.unwrapped.asInstanceOf[String])
+    castOrFail(STRING, Set(NUMBER, BOOLEAN, STRING), { cv => String.valueOf(cv.unwrapped) })
 
   /**
    * Casts this cursor to a `ConfigListCursor`.
@@ -66,7 +66,7 @@ sealed trait ConfigCursor {
    *         otherwise.
    */
   def asListCursor: Either[ConfigReaderFailures, ConfigListCursor] =
-    castOrFail(ConfigValueType.LIST, _.asInstanceOf[ConfigList]).right.map(ConfigListCursor(_, pathElems))
+    castOrFail(LIST, Set(LIST), _.asInstanceOf[ConfigList]).right.map(ConfigListCursor(_, pathElems))
 
   /**
    * Casts this cursor to a list of cursors.
@@ -84,7 +84,7 @@ sealed trait ConfigCursor {
    *         otherwise.
    */
   def asObjectCursor: Either[ConfigReaderFailures, ConfigObjectCursor] =
-    castOrFail(ConfigValueType.OBJECT, _.asInstanceOf[ConfigObject]).right.map(ConfigObjectCursor(_, pathElems))
+    castOrFail(OBJECT, Set(OBJECT), _.asInstanceOf[ConfigObject]).right.map(ConfigObjectCursor(_, pathElems))
 
   /**
    * Casts this cursor to a map from config keys to cursors.
@@ -103,27 +103,69 @@ sealed trait ConfigCursor {
    */
   def asCollectionCursor: Either[ConfigReaderFailures, Either[ConfigListCursor, ConfigObjectCursor]] = {
     if (isUndefined) {
-      fail(KeyNotFound(path, location, Set()))
+      failed(KeyNotFound.forKeys(path, Set()))
     } else {
       val listAtLeft = asListCursor.right.map(Left.apply)
       lazy val mapAtRight = asObjectCursor.right.map(Right.apply)
       listAtLeft
         .left.flatMap(_ => mapAtRight)
-        .left.flatMap(_ => fail(WrongType(value.valueType, Set(ConfigValueType.LIST, ConfigValueType.OBJECT), location, path)))
+        .left.flatMap(_ => failed(WrongType(value.valueType, Set(LIST, OBJECT))))
     }
   }
 
-  private[this] def castOrFail[A](expectedType: ConfigValueType, cast: ConfigValue => A): Either[ConfigReaderFailures, A] = {
+  /**
+   * Returns a failed `ConfigReader` result resulting from scoping a `FailureReason` into the context of this cursor.
+   *
+   * This operation is the easiest way to return a failure from a `ConfigReader`.
+   *
+   * @param reason the reason of the failure
+   * @tparam A the returning type of the `ConfigReader`
+   * @return a failed `ConfigReader` result built by scoping `reason` into the context of this cursor.
+   */
+  def failed[A](reason: FailureReason): Either[ConfigReaderFailures, A] =
+    Left(ConfigReaderFailures(failureFor(reason)))
+
+  /**
+   * Returns a `ConfigReaderFailure` resulting from scoping a `FailureReason` into the context of this cursor.
+   *
+   * This operation is useful for constructing `ConfigReaderFailures` when there are multiple `FailureReason`s.
+   *
+   * @param reason the reason of the failure
+   * @return a `ConfigReaderFailure` built by scoping `reason` into the context of this cursor.
+   */
+  def failureFor(reason: FailureReason): ConfigReaderFailure =
+    ConvertFailure(reason, this)
+
+  /**
+   * Returns a failed `ConfigReader` result resulting from scoping a `Either[FailureReason, A]` into the context of
+   * this cursor.
+   *
+   * This operation is needed when control of the reading process is passed to a place without a `ConfigCursor`
+   * instance providing the nexessary context (for example, when `ConfigReader.fromString` is used. In those scenarios,
+   * the call should be wrapped in this method in order to turn `FailureReason` instances into `ConfigReaderFailures`.
+   *
+   * @param result the result of a config reading operation
+   * @tparam A the returning type of the `ConfigReader`
+   * @return a `ConfigReader` result built by scoping `reason` into the context of this cursor.
+   */
+  def scopeFailure[A](result: Either[FailureReason, A]): Either[ConfigReaderFailures, A] =
+    result.left.map { reason => ConfigReaderFailures(failureFor(reason), Nil) }
+
+  private[this] def castOrFail[A](
+    expectedType: ConfigValueType,
+    acceptedConfigTypes: Set[ConfigValueType],
+    cast: ConfigValue => A): Either[ConfigReaderFailures, A] = {
+
     if (isUndefined) {
-      fail(KeyNotFound(path, location, Set()))
-    } else if (value.valueType != expectedType) {
-      fail(WrongType(value.valueType, Set(expectedType), location, path))
+      failed(KeyNotFound.forKeys(path, Set()))
+    } else if (!acceptedConfigTypes.contains(value.valueType)) {
+      failed(WrongType(value.valueType, Set(expectedType)))
     } else {
       Try(cast(value)) match {
         case Success(v) => Right(v)
         case Failure(ex) =>
           // this should never happen, this is just a safety net
-          fail(CannotConvert(value.toString, expectedType.toString, ex.toString, location, path))
+          failed(CannotConvert(value.toString, expectedType.toString, ex.toString))
       }
     }
   }
@@ -173,7 +215,7 @@ case class ConfigListCursor(value: ConfigList, pathElems: List[String], offset: 
    */
   def atIndex(idx: Int): Either[ConfigReaderFailures, ConfigCursor] = {
     atIndexOrUndefined(idx) match {
-      case idxCur if idxCur.isUndefined => fail(KeyNotFound(idxCur.path, location, indexKey(idx), Set()))
+      case idxCur if idxCur.isUndefined => failed(KeyNotFound.forKeys(indexKey(idx), Set()))
       case idxCur => Right(idxCur)
     }
   }
@@ -242,7 +284,7 @@ case class ConfigObjectCursor(value: ConfigObject, pathElems: List[String]) exte
    */
   def atKey(key: String): Either[ConfigReaderFailures, ConfigCursor] = {
     atKeyOrUndefined(key) match {
-      case keyCur if keyCur.isUndefined => fail(KeyNotFound(keyCur.path, location, key, keys))
+      case keyCur if keyCur.isUndefined => failed(KeyNotFound.forKeys(key, keys))
       case keyCur => Right(keyCur)
     }
   }
